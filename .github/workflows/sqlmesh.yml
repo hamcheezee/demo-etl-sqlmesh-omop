@@ -1,0 +1,57 @@
+name: SQLMesh Bot
+run-name: 🤖 SQLMesh Bot 🤖
+on:
+  pull_request:
+    types:
+    - synchronize
+    - opened
+  # Required if using required approvers to automate deployments
+  pull_request_review:
+    types:
+    - edited
+    - submitted
+    - dismissed
+  # Required if using comments to issue commands to the bot
+  issue_comment:
+    types:
+    - created
+# The latest commit is the one that will be used to create the PR environment and deploy to production
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+jobs:
+  sqlmesh:
+    name: SQLMesh Actions Workflow
+    runs-on: self-hosted
+    permissions:
+      # Required to access code in PR
+      contents: write
+      # Required to post comments
+      issues: write
+      # Required to update check runs
+      checks: write
+      # Required to merge
+      pull-requests: write
+    env:
+      POSTGRES_USER: ${{secrets.POSTGRES_USER}}
+      POSTGRES_PASSWORD: ${{secrets.POSTGRES_PASSWORD}}
+      POSTGRES_DB: ${{secrets.POSTGRES_DB}}
+      POSTGRES_HOST: ${{secrets.POSTGRES_HOST}}
+      POSTGRES_PORT: 5432
+    steps:
+      # Step 1: Checkout the appropriate branch depending on PR status
+      - name: Checkout PR branch
+        if: github.event.pull_request.merged == false  # Only checkout PR branch if not merged
+        uses: actions/checkout@v4
+        with:
+          ref: refs/pull/${{ github.event.pull_request.number }}/merge  # Checkout the PR branch for testing
+      # Step 2: Install Docker Compose (fix the error)
+      - name: Install packages
+        run: |
+          export POSTGRES_HOST="${{secrets.POSTGRES_HOST}}"
+          pip install sqlmesh[cicd] pygithub psycopg2
+      # Step 3: Run CI/CD Bot on PR branch (if not merged)
+      - name: Run CI/CD Bot on PR branch (if not merged)
+        if: github.event.pull_request.merged == false  # Only run CI/CD bot on unmerged PRs
+        run: |
+          sqlmesh_cicd -p ${{ github.workspace }}/sqlmesh_project github --token ${{ secrets.GITHUB_TOKEN }} run-all
